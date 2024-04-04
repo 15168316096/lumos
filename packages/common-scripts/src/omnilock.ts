@@ -36,7 +36,7 @@ import {
 } from "@ckb-lumos/codec/lib/blockchain";
 import { bytify, hexify } from "@ckb-lumos/codec/lib/bytes";
 import * as bitcoin from "./omnilock-bitcoin";
-import * as tron from "./omnilock-tron";
+import * as decodeAddr from "./omnilock-tron";
 
 const { ScriptValue } = values;
 
@@ -49,6 +49,7 @@ export type OmnilockAuth =
   | IdentityEthereum
   | IdentityBitcoin
   | IdentityEthereum_DISPLAY
+  | IdentitySolana
   | IdentityEos
   | IdentityTron
   | IdentityDogecoin;
@@ -98,6 +99,13 @@ export type IdentityEthereum_DISPLAY = {
    */
   content: BytesLike;
 };
+export type IdentitySolana = {
+  flag: "SOLANA";
+  /**
+   * an Ethereum address, aka the public key hash, which authid = 18
+   */
+  address: string;
+};
 export type IdentityBitcoin = {
   flag: "BITCOIN";
   /**
@@ -143,14 +151,18 @@ export function createOmnilockScript(
         );
       case "TRON":
         return bytes.hexify(
-          bytes.concat([3], tron.decodeAddress(omnilockInfo.auth.address), [0])
+          bytes.concat([3], decodeAddr.decodeAddress(omnilockInfo.auth.address), [0])
         );
       case "DOGECOIN":
         return bytes.hexify(
-          bytes.concat([5], tron.decodeAddress(omnilockInfo.auth.address), [0])
+          bytes.concat([5], decodeAddr.decodeAddress(omnilockInfo.auth.address), [0])
         ); //same to tron addres decode
       // case "EOS":
       //   return bytes.hexify(bytes.concat([2], "0xfc06724d74926c15809adf38659a3c1fbec943d7", [0]));   //not support todo hardcode pubkeyhash
+      case "SOLANA":
+        return bytes.hexify(
+          bytes.concat([13], decodeAddr.decodeAddress(omnilockInfo.auth.address), [0])
+        )
       default:
         throw new Error(`Not supported flag: ${flag}.`);
     }
