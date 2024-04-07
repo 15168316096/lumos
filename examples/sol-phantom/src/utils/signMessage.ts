@@ -8,7 +8,7 @@ import { PhantomProvider } from '../types';
  */
 const signMessage = async (provider: PhantomProvider, message: string): Promise<string> => {
   try {
-    let ckb_prefix = "CKB transaction:"
+    let ckb_prefix = "CKB transaction: "
     console.log("digest:", JSON.stringify(message))
     const encodedMessage = new TextEncoder().encode(ckb_prefix + message);
     const signedMessage = await provider.signMessage(encodedMessage, "utf8");

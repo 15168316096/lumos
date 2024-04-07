@@ -1,9 +1,11 @@
 import { BI, Cell, helpers, Indexer, RPC, commons } from "../../../packages/lumos";
 import { blockchain, bytify, hexify } from "../../../packages/lumos/codec";
 import { CONFIG } from ".";
+import bs58 from 'bs58';
 import {
     getProvider,
     signMessage,
+    getSolAddress
 } from "./utils"
 
 const CKB_RPC_URL_TestNet = "https://testnet.ckb.dev";
@@ -26,7 +28,7 @@ interface Options {
 const SECP_SIGNATURE_PLACEHOLDER = hexify(
     new Uint8Array(
         commons.omnilock.OmnilockWitnessLock.pack({
-            signature: new Uint8Array(65).buffer,
+            signature: new Uint8Array(97).buffer,
         }).byteLength
     )
 );
@@ -101,16 +103,21 @@ export async function transfer(options: Options): Promise<string> {
     }
 
     tx = commons.omnilock.prepareSigningEntries(tx, { config: CONFIG });
+    const publicKeyBytes = decodeSolAddress(await getSolAddress(phantom_sol));
+    console.log(`+++publicKeyBytes:${JSON.stringify(publicKeyBytes)}`)
+    const publicKeyHexString = publicKeyBytes.map(byte => byte.toString(16).padStart(2, '0')).join('');
+    console.log(publicKeyHexString);
+    console.log(`+++publicKeyHexString:${JSON.stringify(publicKeyHexString)}`);
     const signedMessage = await signMessage(phantom_sol,
         tx.signingEntries.get(0).message);
     console.log(typeof signedMessage, JSON.stringify(signedMessage));
-    const signedWitness = hexify(
-        blockchain.WitnessArgs.pack({
-            lock: commons.omnilock.OmnilockWitnessLock.pack({
-                signature: bytify(signedMessage.signature),
-            }),
-        })
-    );
+    const combinedBytes = new Uint8Array([...signedMessage.signature, ...publicKeyBytes]);
+    console.log("combinedBytes:", combinedBytes);
+    const signedWitness = hexify(blockchain.WitnessArgs.pack({
+        lock: commons.omnilock.OmnilockWitnessLock.pack({
+            signature: bytify(combinedBytes),
+        }),
+    }));
     console.log("witness:", JSON.stringify(signedWitness))
     tx = tx.update("witnesses", (witnesses) => witnesses.set(0, signedWitness));
 
@@ -131,4 +138,9 @@ export async function capacityOf(address: string): Promise<BI> {
     }
 
     return balance;
+}
+
+function decodeSolAddress(solAddress: string): Uint8Array{
+    const decoded = bs58.decode(solAddress);
+    return decoded;
 }
