@@ -1,5 +1,7 @@
 import { TransactionSkeletonType, Options } from "@ckb-lumos/helpers";
 import { bytes, BytesLike } from "@ckb-lumos/codec";
+import bs58 from "bs58";
+import {utils} from "@ckb-lumos/base";
 import {
   values,
   Cell,
@@ -161,8 +163,9 @@ export function createOmnilockScript(
       //   return bytes.hexify(bytes.concat([2], "0xfc06724d74926c15809adf38659a3c1fbec943d7", [0]));   //not support todo hardcode pubkeyhash
       case "SOLANA":
         return bytes.hexify(
-          bytes.concat([13], decodeAddr.decodeAddress(omnilockInfo.auth.address), [0])
-        )
+            bytes.concat([0x13], utils.ckbHash(bs58.decode(omnilockInfo.auth.address)).slice(0, 42), [0x00])
+        );
+
       default:
         throw new Error(`Not supported flag: ${flag}.`);
     }
