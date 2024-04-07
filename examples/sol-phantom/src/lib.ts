@@ -28,7 +28,7 @@ interface Options {
 const SECP_SIGNATURE_PLACEHOLDER = hexify(
     new Uint8Array(
         commons.omnilock.OmnilockWitnessLock.pack({
-            signature: new Uint8Array(97).buffer,
+            signature: new Uint8Array(96).buffer,
         }).byteLength
     )
 );
