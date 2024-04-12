@@ -1,26 +1,23 @@
-import { TransactionSkeletonType, Options } from "@ckb-lumos/helpers";
+import { Options, TransactionSkeletonType } from "@ckb-lumos/helpers";
 import { bytes, BytesLike } from "@ckb-lumos/codec";
-import bs58 from "bs58";
-import {utils} from "@ckb-lumos/base";
 import {
-  values,
-  Cell,
-  WitnessArgs,
-  CellCollector as CellCollectorType,
-  Script,
-  CellProvider,
-  QueryOptions,
-  OutPoint,
-  HexString,
-  PackedSince,
   blockchain,
+  Cell,
+  CellCollector as CellCollectorType,
+  CellProvider,
+  HexString,
+  OutPoint,
+  PackedSince,
+  QueryOptions,
+  Script,
+  values,
+  WitnessArgs,
 } from "@ckb-lumos/base";
-import { getConfig, Config } from "@ckb-lumos/config-manager";
+import { Config, getConfig } from "@ckb-lumos/config-manager";
 import {
   addCellDep,
-  prepareSigningEntries as _prepareSigningEntries,
   isOmnilockScript,
-  OMNILOCK_SIGNATURE_PLACEHOLDER,
+  prepareSigningEntries as _prepareSigningEntries,
 } from "./helper";
 import { FromInfo } from ".";
 import { parseFromInfo } from "./from_info";
@@ -38,6 +35,8 @@ import {
 } from "@ckb-lumos/codec/lib/blockchain";
 import { bytify, hexify } from "@ckb-lumos/codec/lib/bytes";
 import * as bitcoin from "./omnilock-bitcoin";
+import { decode as bs58Decode } from "bs58";
+import { ckbHash } from "@ckb-lumos/base/lib/utils";
 import * as decodeAddr from "./omnilock-tron";
 
 const { ScriptValue } = values;
@@ -104,7 +103,7 @@ export type IdentityEthereum_DISPLAY = {
 export type IdentitySolana = {
   flag: "SOLANA";
   /**
-   * an Ethereum address, aka the public key hash, which authid = 18
+   * base58 encoded ed25519 public key
    */
   address: string;
 };
@@ -118,6 +117,27 @@ export type IdentityBitcoin = {
    */
   address: string;
 };
+
+enum IdentityFlagsType {
+  IdentityFlagsCkb = 0,
+  IdentityFlagsEthereum = 1,
+  IdentityFlagsEos = 2,
+  IdentityFlagsTron = 3,
+  IdentityFlagsBitcoin = 4,
+  IdentityFlagsDogecoin = 5,
+  IdentityCkbMultisig = 6,
+  IdentityFlagsEthereumDisplaying = 18,
+  IdentityFlagsSolana = 19,
+  IdentityFlagsOwnerLock = 0xfc,
+  IdentityFlagsExec = 0xfd,
+  IdentityFlagsDl = 0xfe,
+}
+
+const SECP256K1_SIGNATURE_PLACEHOLDER_LENGTH = 65;
+
+const ED25519_SIGNATURE_PLACEHOLDER_LENGTH =
+  64 + // signature length
+  32; // public key length
 
 /**
  * only support ETHEREUM and SECP256K1_BLAKE160 mode currently
@@ -153,17 +173,29 @@ export function createOmnilockScript(
         );
       case "TRON":
         return bytes.hexify(
-          bytes.concat([3], decodeAddr.decodeAddress(omnilockInfo.auth.address), [0])
+          bytes.concat(
+            [3],
+            decodeAddr.decodeAddress(omnilockInfo.auth.address),
+            [0]
+          )
         );
       case "DOGECOIN":
         return bytes.hexify(
-          bytes.concat([5], decodeAddr.decodeAddress(omnilockInfo.auth.address), [0])
+          bytes.concat(
+            [5],
+            decodeAddr.decodeAddress(omnilockInfo.auth.address),
+            [0]
+          )
         ); //same to tron addres decode
       // case "EOS":
       //   return bytes.hexify(bytes.concat([2], "0xfc06724d74926c15809adf38659a3c1fbec943d7", [0]));   //not support todo hardcode pubkeyhash
       case "SOLANA":
         return bytes.hexify(
-            bytes.concat([0x13], utils.ckbHash(bs58.decode(omnilockInfo.auth.address)).slice(0, 42), [0x00])
+          bytes.concat(
+            [0x13],
+            ckbHash(bs58Decode(omnilockInfo.auth.address)).slice(0, 42),
+            [0x00]
+          )
         );
 
       default:
@@ -356,9 +388,14 @@ export async function setupInputCell(
       );
     }
     let witness: string = txSkeleton.get("witnesses").get(firstIndex)!;
+    const placeholderLength =
+      bytes.bytify(inputCell.cellOutput.lock.args)[0] ===
+      IdentityFlagsType.IdentityFlagsSolana
+        ? ED25519_SIGNATURE_PLACEHOLDER_LENGTH
+        : SECP256K1_SIGNATURE_PLACEHOLDER_LENGTH;
+
     const newWitnessArgs: WitnessArgs = {
-      /* 85-byte zeros in hex */
-      lock: OMNILOCK_SIGNATURE_PLACEHOLDER,
+      lock: createWitnessLockPlaceholder(placeholderLength),
     };
     witness = bytes.hexify(blockchain.WitnessArgs.pack(newWitnessArgs));
     txSkeleton = txSkeleton.update("witnesses", (witnesses) =>
@@ -367,6 +404,15 @@ export async function setupInputCell(
   }
 
   return txSkeleton;
+}
+
+function createWitnessLockPlaceholder(signatureLength: number) {
+  console.log("signature length", signatureLength);
+  const serializedLength = OmnilockWitnessLock.pack({
+    signature: new Uint8Array(signatureLength),
+  }).byteLength;
+
+  return bytes.hexify(new Uint8Array(serializedLength));
 }
 
 /**
